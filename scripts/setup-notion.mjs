@@ -9,7 +9,9 @@
 //   - an empty Notion page shared with your integration: a "Content" database is
 //     created inside it, and .env is updated to the new database's ID, or
 //   - an existing database: any missing columns and Type options are added.
-// It never deletes or edits existing rows, so it is safe to run again.
+// It never deletes existing rows or overwrites what's in them, so it is safe to
+// run again. The one edit it makes: a demo project row with an empty Cover gets
+// its poster (rows seeded before the posters existed).
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { Client, APIErrorCode, LogLevel, isNotionClientError } from '@notionhq/client'
@@ -105,7 +107,7 @@ if (!target) fail(`NOTION_DATABASE_ID doesn't look like a Notion ID: "${env.NOTI
 
 // Notion's own warnings repeat the errors this script explains.
 const notion = new Client({ auth: env.NOTION_API_KEY, logLevel: LogLevel.ERROR })
-const { rt, img } = demo
+const { rt } = demo
 
 // ---------- schema: the columns src/lib/notion.ts reads ----------
 const TYPE_OPTIONS = [
@@ -211,12 +213,12 @@ async function completeSchema(dataSourceId) {
 
 // ---------- demo rows ----------
 async function seed(dataSourceId) {
-  const existing = new Set()
+  const existing = new Map() // "Type:slug" → the row's page
   let cursor
   do {
     const res = await notion.dataSources.query({ data_source_id: dataSourceId, start_cursor: cursor })
     for (const page of res.results) {
-      existing.add(`${page.properties.Type?.select?.name}:${plain(page.properties.Slug) || plain(page.properties.Title)}`)
+      existing.set(`${page.properties.Type?.select?.name}:${plain(page.properties.Slug) || plain(page.properties.Title)}`, page)
     }
     cursor = res.has_more ? res.next_cursor : undefined
   } while (cursor)
@@ -224,36 +226,81 @@ async function seed(dataSourceId) {
   let created = 0
   async function createRow(key, properties, extra = {}) {
     if (existing.has(key)) return
-    await notion.pages.create({
-      parent: { type: 'data_source_id', data_source_id: dataSourceId },
-      properties: { Published: { checkbox: true }, ...properties },
-      ...extra,
-    })
+    await call(key, () =>
+      notion.pages.create({
+        parent: { type: 'data_source_id', data_source_id: dataSourceId },
+        properties: { Published: { checkbox: true }, ...properties },
+        ...extra,
+      }),
+    )
     created++
     console.log(`  + ${key}`)
   }
 
-  const cover = (id) => ({ type: 'external', external: { url: img(id) } })
-  const coverFile = (id) => ({ files: [{ name: 'cover', type: 'external', external: { url: img(id) } }] })
+  const optionalUrl = (name, url) => (url ? { [name]: { url } } : {})
 
-  for (const [type, items] of [['Project', demo.projects], ['Post', demo.posts]]) {
-    for (const item of items) {
-      await createRow(
-        `${type}:${item.slug}`,
-        {
-          Title: { title: [rt(item.title)] },
-          Slug: { rich_text: [rt(item.slug)] },
-          Type: { select: { name: type } },
-          Date: { date: { start: item.date } },
-          Tags: { multi_select: item.tags.map((name) => ({ name })) },
-          Cover: coverFile(item.cover),
-          ...(type === 'Post'
-            ? { Summary: { rich_text: [rt(item.summary)] } }
-            : { Description: { rich_text: [rt(item.description)] }, Featured: { checkbox: item.featured } }),
-        },
-        { cover: cover(item.cover), children: item.body },
-      )
+  // Uploads a file from scripts/demo-media/ to Notion (all are under the 5MB
+  // single-request limit of free workspaces) and returns the files value.
+  async function uploadMedia(filename) {
+    const contentType = filename.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg'
+    const data = new Blob([readFileSync(new URL(`./demo-media/${filename}`, import.meta.url))], { type: contentType })
+    const upload = await call(filename, () => notion.fileUploads.create({ mode: 'single_part', filename, content_type: contentType }))
+    await call(filename, () => notion.fileUploads.send({ file_upload_id: upload.id, file: { filename, data } }))
+    return { files: [{ name: filename, type: 'file_upload', file_upload: { id: upload.id } }] }
+  }
+
+  // Projects have a Cover Video, and a Cover image that is the clip's first
+  // frame (scripts/demo-media/<clip>.jpg, made with
+  // `ffmpeg -i <clip>.mp4 -frames:v 1 -q:v 3 <clip>.jpg`), which the site shows
+  // as the video's poster while it loads. Posts have a Cover image only.
+  let postersAdded = 0
+  for (const item of demo.projects) {
+    const key = `Project:${item.slug}`
+    const poster = item.video.replace(/.mp4$/, '.jpg')
+    const page = existing.get(key)
+    if (page) {
+      if (page.properties.Cover?.type === 'files' && page.properties.Cover.files.length === 0) {
+        const Cover = await uploadMedia(poster)
+        await call(key, () => notion.pages.update({ page_id: page.id, properties: { Cover } }))
+        postersAdded++
+        console.log(`  ~ ${key}: added Cover poster`)
+      }
+      continue
     }
+    await createRow(
+      key,
+      {
+        Title: { title: [rt(item.title)] },
+        Slug: { rich_text: [rt(item.slug)] },
+        Type: { select: { name: 'Project' } },
+        ...(item.date ? { Date: { date: { start: item.date } } } : {}),
+        Tags: { multi_select: item.tags.map((name) => ({ name })) },
+        Cover: await uploadMedia(poster),
+        'Cover Video': await uploadMedia(item.video),
+        Description: { rich_text: [rt(item.description)] },
+        Featured: { checkbox: item.featured },
+        ...optionalUrl('URL', item.url),
+        ...optionalUrl('Live URL', item.liveUrl),
+        ...optionalUrl('Repo URL', item.repoUrl),
+      },
+      { children: item.body },
+    )
+  }
+  for (const item of demo.posts) {
+    await createRow(
+      `Post:${item.slug}`,
+      {
+        Title: { title: [rt(item.title)] },
+        Slug: { rich_text: [rt(item.slug)] },
+        Type: { select: { name: 'Post' } },
+        Date: { date: { start: item.date } },
+        Tags: { multi_select: item.tags.map((name) => ({ name })) },
+        Cover: { files: [{ name: 'cover', type: 'external', external: { url: item.cover } }] },
+        Summary: { rich_text: [rt(item.summary)] },
+        ...optionalUrl('URL', item.url),
+      },
+      { cover: { type: 'external', external: { url: item.cover } }, children: item.body },
+    )
   }
 
   await createRow(
@@ -271,6 +318,7 @@ async function seed(dataSourceId) {
   }
 
   console.log(created ? `✓ Added ${created} demo rows` : '✓ Demo rows already present')
+  if (postersAdded) console.log(`✓ Added Cover posters to ${postersAdded} demo projects`)
 }
 
 // ---------- run ----------

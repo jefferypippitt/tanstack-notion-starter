@@ -17,10 +17,11 @@ export interface DemoPost {
   summary: string
   date: string
   tags: string[]
-  /** An Unsplash photo id; `img()` turns it into a URL. */
+  /** The cover image's URL. */
   cover: string
+  /** The original article. */
+  url?: string
   body: DemoBlock[]
 }
 
 export declare const posts: DemoPost[]
-export declare const img: (id: string, w?: number) => string

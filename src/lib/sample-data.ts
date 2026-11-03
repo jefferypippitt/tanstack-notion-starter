@@ -1,5 +1,5 @@
 import type { AboutContent, NotionBlock, Post, Project, RichText, SocialLink } from './types'
-import { img, posts as demoPosts, type DemoBlock, type DemoRichText } from '../../scripts/notion-demo-content.mjs'
+import { posts as demoPosts, type DemoBlock, type DemoRichText } from '../../scripts/notion-demo-content.mjs'
 
 // The sample posts are the same demo posts `pnpm setup:notion --seed`
 // writes to Notion, converted from the Notion API's block shape to the one
@@ -40,7 +40,7 @@ export const samplePosts: Post[] = demoPosts.map((post, index) => ({
   date: post.date,
   published: true,
   tags: post.tags,
-  coverImage: img(post.cover),
+  coverImage: post.cover,
   featured: index === 0,
   content: post.body.map(toBlock).filter((block): block is NotionBlock => block !== null),
 }))
@@ -55,7 +55,6 @@ export const sampleProjects: Project[] = [
     date: '2024-01-20',
     published: true,
     tags: ['TanStack', 'Notion', 'TypeScript'],
-    coverImage: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80',
     featured: true,
     repoUrl: 'https://example.com/notion-cms-starter',
     liveUrl: 'https://example.com',
@@ -147,7 +146,7 @@ export const sampleAbout: AboutContent = {
     {
       id: 'sample-experience-2',
       role: 'Frontend Engineer',
-      company: 'Studio Name',
+      company: 'Acme Inc.',
       start: '2019-01-01',
       end: '2022-01-01',
     },

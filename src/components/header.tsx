@@ -13,10 +13,6 @@ export function initials(name: string) {
     .toUpperCase()
 }
 
-// Sticky across every page: initials home link on the left, the section links
-// on the right, the way a narrow column reads best. A 48px row (--bar-height)
-// of 32px controls; the initials and the last link's text line up with the
-// page's text edge. The theme menu lives in the footer.
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
@@ -25,15 +21,12 @@ export function SiteHeader() {
           to="/"
           aria-label={`${siteConfig.author.name}, home`}
           className={cn(
-            'rounded-md weight-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+            'rounded-md font-serif weight-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
             typeClass('subtitle'),
           )}
         >
           {initials(siteConfig.author.name)}
         </Link>
-
-        {/* Links are 32px controls with 10px padding; pulling the row out by
-            that much puts the last label on the column edge. */}
         <nav aria-label="Site" className="-mr-2.5">
           <ul className="flex items-center">
             {navigation.map((item) => (

@@ -41,13 +41,13 @@ Every row has a **Type**, and only rows with **Published** checked appear on the
 | Type | What it is | Columns it uses |
 | --- | --- | --- |
 | `Post` | A blog post | Title, Slug, Date, Tags, Summary, Cover |
-| `Project` | A portfolio project | Title, Slug, Date, Tags, Description, Cover, Cover Video, Featured, Repo URL, Live URL |
+| `Project` | A portfolio project | Title, Slug, Date, Tags, Description, Cover Video, Cover, Featured, Repo URL, Live URL |
 | `About` | The About page text | Title (anything); the page body is the text |
 | `Experience` | A role on the About page | Title (your role), Company, Date (with an end date; leave it empty for a current role) |
 | `Link` | An icon in the footer | Title (the label, e.g. "GitHub"), URL |
 
 - A post's or project's **page body** becomes the article.
-- **Cover** falls back to the Notion page cover. A project's **Cover Video** plays in place of its cover image.
+- A post's **Cover** falls back to the Notion page cover. A project's **Cover Video** plays on its card and page; set its **Cover** to the clip's first frame (`ffmpeg -i clip.mp4 -frames:v 1 clip.jpg`) and it shows while the video loads, with no visible switch.
 - **Featured** projects are listed first on the Projects page.
 - Footer icons are picked from the link's domain (a globe for anything unrecognized), in the order the rows were created.
 

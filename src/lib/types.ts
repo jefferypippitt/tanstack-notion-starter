@@ -21,6 +21,8 @@ export interface Project {
   date: string
   published: boolean
   tags: string[]
+  // Cover in Notion. With a Cover Video, this is its poster: the clip's first
+  // frame, shown while the video loads.
   coverImage?: string
   // Cover Video in Notion: plays in place of the cover image when set.
   coverVideo?: string
