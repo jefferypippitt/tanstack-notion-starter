@@ -1,30 +1,86 @@
-export function SetupBanner() {
+import { InfoIcon } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import type { NotionSetupProblem } from '@/lib/notion'
+import { surfaceClasses } from '@/lib/surface-classes'
+import { cn } from '@/lib/utils'
+
+const Code = ({ children }: { children: React.ReactNode }) => (
+  <code className="font-mono">{children}</code>
+)
+
+const SETUP = <Code>pnpm setup:notion</Code>
+
+// What went wrong, and the one step that fixes it.
+function explain(problem: NotionSetupProblem): { title: string; body: React.ReactNode } {
+  switch (problem.code) {
+    case 'missing-env':
+      return {
+        title: 'Showing sample content',
+        body: (
+          <>
+            Run {SETUP} to connect Notion. It asks for your integration secret and a Notion page, creates the
+            database, and writes <Code>.env</Code>. Then restart the dev server.
+          </>
+        ),
+      }
+    case 'bad-token':
+      return {
+        title: 'Notion rejected the API key',
+        body: (
+          <>
+            Copy the token for your integration again into <Code>NOTION_API_KEY</Code> in <Code>.env</Code>, then
+            restart the dev server.
+          </>
+        ),
+      }
+    case 'page-id':
+      return {
+        title: 'That ID is a page, not a database',
+        body: (
+          <>
+            <Code>{problem.variable}</Code> points to a Notion page. Run {SETUP} to create the database inside it
+            and update <Code>.env</Code>, then restart the dev server.
+          </>
+        ),
+      }
+    case 'not-shared':
+      return {
+        title: 'Notion can’t find the database',
+        body: (
+          <>
+            Open the page or database in <Code>{problem.variable}</Code> in Notion, click ••• → Connections, and add
+            your integration.
+          </>
+        ),
+      }
+    case 'missing-columns':
+      return {
+        title: 'The database is missing columns',
+        body: (
+          <>
+            {problem.columns.join(', ')}. Run {SETUP} to add them.
+          </>
+        ),
+      }
+    case 'unreachable':
+      return { title: 'Couldn’t reach Notion', body: problem.message }
+  }
+}
+
+// Shown while Notion isn't set up or can't be read. It opens the page, one
+// block-gap above the route's own content.
+export function SetupBanner({ problem }: { problem: NotionSetupProblem }) {
+  const { title, body } = explain(problem)
+
   return (
-    <div className="mb-8 p-6 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-xl">
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0">
-          <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-bold text-yellow-900 dark:text-yellow-100 mb-2">
-            Using Sample Content
-          </h3>
-          <p className="text-yellow-800 dark:text-yellow-200 mb-3">
-            You're seeing sample blog posts and projects. To display your own content from Notion:
-          </p>
-          <ol className="list-decimal list-inside space-y-1 text-sm text-yellow-800 dark:text-yellow-200 mb-3">
-            <li>Create a Notion integration at notion.so/my-integrations</li>
-            <li>Duplicate the provided database template</li>
-            <li>Share your database with the integration</li>
-            <li>Add your integration token and database ID to .env</li>
-          </ol>
-          <p className="text-sm text-yellow-700 dark:text-yellow-300">
-            See the <a href="https://github.com/yourusername/your-repo#readme" className="underline font-medium">README</a> for detailed setup instructions.
-          </p>
-        </div>
-      </div>
+    <div className="mb-(--space-block)">
+      <Alert className={cn('border-0', surfaceClasses(2))}>
+        <InfoIcon />
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription>
+          <p>{body}</p>
+        </AlertDescription>
+      </Alert>
     </div>
   )
 }

@@ -1,200 +1,224 @@
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import type { NotionBlock, RichText } from '../lib/types'
-import { useState } from 'react'
+import { ChevronRightIcon } from 'lucide-react'
+import type { NotionBlock, RichText } from '@/lib/types'
+import { useHighlightedCode } from '@/hooks/use-highlighted-code'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockContent,
+  CodeBlockCopyButton,
+  CodeBlockHeader,
+  CodeBlockLine,
+  CodeBlockTitle,
+} from '@/components/ui/code-block'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
+import { typeClass } from '@/lib/type-scale'
+import { surfaceClasses } from '@/lib/surface-classes'
+import { useSurface } from '@/lib/surface-context'
+import { Elevated } from '@/lib/elevated'
 
 function RichTextRenderer({ richText }: { richText: RichText[] }) {
   return (
     <>
       {richText.map((text, i) => {
-        let element = <span key={i}>{text.text}</span>
+        let element: React.ReactNode = text.text
 
+        // Plain elements: .typeset styles code, strong, and links.
+        if (text.code) element = <code>{element}</code>
         if (text.bold) element = <strong>{element}</strong>
         if (text.italic) element = <em>{element}</em>
-        if (text.code) element = <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-sm">{element}</code>
         if (text.strikethrough) element = <s>{element}</s>
         if (text.underline) element = <u>{element}</u>
         if (text.href) {
           element = (
-            <a
-              href={text.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[var(--lagoon-deep)] hover:underline"
-            >
+            <a href={text.href} target="_blank" rel="noopener noreferrer">
               {element}
             </a>
           )
         }
 
-        return element
+        return <span key={i}>{element}</span>
       })}
     </>
   )
 }
 
-function ToggleBlock({ text, children }: { text: RichText[]; children: NotionBlock[] }) {
-  const [isOpen, setIsOpen] = useState(false)
+function plainText(richText: RichText[]) {
+  return richText.map((t) => t.text).join('')
+}
+
+function NotionCode({ code, language }: { code: string; language: string }) {
+  const lines = useHighlightedCode(code, language)
+  const label = language === 'plain text' ? 'Text' : language
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden my-4">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-      >
-        <svg
-          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-90' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="font-medium">
-          <RichTextRenderer richText={text} />
-        </span>
-      </button>
-      {isOpen && (
-        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-          <NotionRenderer blocks={children} />
-        </div>
-      )}
-    </div>
+    // A card one step above the prose. The stock block goes transparent inside
+    // it (its own dark fill would cover the surface). .not-typeset keeps the
+    // prose rules out while the card still takes the prose spacing above it.
+    <Elevated offset={1} className="not-typeset rounded-lg">
+      <CodeBlock className="border-0 bg-transparent dark:bg-transparent">
+        <CodeBlockHeader>
+          <CodeBlockTitle>{label}</CodeBlockTitle>
+          <CodeBlockActions>
+            <CodeBlockCopyButton value={code} />
+          </CodeBlockActions>
+        </CodeBlockHeader>
+        <CodeBlockContent>
+          {lines.map((line, index) => (
+            <CodeBlockLine key={index}>{line}</CodeBlockLine>
+          ))}
+        </CodeBlockContent>
+      </CodeBlock>
+    </Elevated>
   )
 }
 
-export function NotionRenderer({ blocks }: { blocks: NotionBlock[] }) {
-  const isDarkMode = typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+function ToggleBlock({ text, children }: { text: RichText[]; children: NotionBlock[] }) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="group/toggle flex items-baseline gap-2 text-left text-foreground weight-semibold">
+        <ChevronRightIcon
+          aria-hidden
+          className="size-4 shrink-0 translate-y-0.5 text-muted-foreground transition-transform group-data-[panel-open]/toggle:rotate-90"
+        />
+        <RichTextRenderer richText={text} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3 pl-6">
+        <BlockList blocks={children} />
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+type ListGroup = { type: 'list'; ordered: boolean; items: RichText[][] }
+
+// Notion returns list items one by one. Group runs of them into real lists.
+function groupBlocks(blocks: NotionBlock[]) {
+  const grouped: Array<NotionBlock | ListGroup> = []
+
+  for (const block of blocks) {
+    if (block.type === 'bulleted_list_item' || block.type === 'numbered_list_item') {
+      const ordered = block.type === 'numbered_list_item'
+      const previous = grouped[grouped.length - 1]
+      if (previous?.type === 'list' && previous.ordered === ordered) {
+        previous.items.push(block.text)
+      } else {
+        grouped.push({ type: 'list', ordered, items: [block.text] })
+      }
+    } else {
+      grouped.push(block)
+    }
+  }
+
+  return grouped
+}
+
+// Blocks render as plain HTML (headings, lists, quotes, rules, figures) and
+// the surrounding .typeset sets them in the type system's prose styles.
+function BlockList({ blocks }: { blocks: NotionBlock[] }) {
+  // Callouts sit one step above whatever the prose sits on.
+  const level = useSurface() + 1
 
   return (
-    <div className="prose prose-gray dark:prose-invert max-w-none">
-      {blocks.map((block, index) => {
+    <>
+      {groupBlocks(blocks).map((block, index) => {
         switch (block.type) {
+          case 'list': {
+            const List = block.ordered ? 'ol' : 'ul'
+            return (
+              <List key={index}>
+                {block.items.map((item, i) => (
+                  <li key={i}>
+                    <RichTextRenderer richText={item} />
+                  </li>
+                ))}
+              </List>
+            )
+          }
+
           case 'paragraph':
             return (
-              <p key={index} className="my-4 leading-relaxed">
+              <p key={index}>
                 <RichTextRenderer richText={block.text} />
               </p>
             )
 
+          // The page title is the h1, so Notion headings start at h2.
           case 'heading_1':
             return (
-              <h1 key={index} className="text-3xl font-bold mt-8 mb-4">
-                <RichTextRenderer richText={block.text} />
-              </h1>
-            )
-
-          case 'heading_2':
-            return (
-              <h2 key={index} className="text-2xl font-bold mt-6 mb-3">
+              <h2 key={index}>
                 <RichTextRenderer richText={block.text} />
               </h2>
             )
 
-          case 'heading_3':
+          case 'heading_2':
             return (
-              <h3 key={index} className="text-xl font-bold mt-5 mb-2">
+              <h3 key={index}>
                 <RichTextRenderer richText={block.text} />
               </h3>
             )
 
-          case 'bulleted_list_item':
+          case 'heading_3':
             return (
-              <li key={index} className="ml-6 list-disc my-2">
+              <h4 key={index}>
                 <RichTextRenderer richText={block.text} />
-              </li>
-            )
-
-          case 'numbered_list_item':
-            return (
-              <li key={index} className="ml-6 list-decimal my-2">
-                <RichTextRenderer richText={block.text} />
-              </li>
+              </h4>
             )
 
           case 'code':
-            const codeText = block.text.map((t) => t.text).join('')
-            return (
-              <div key={index} className="my-6 rounded-lg overflow-hidden">
-                <SyntaxHighlighter
-                  language={block.language}
-                  style={isDarkMode ? vscDarkPlus : vs}
-                  customStyle={{
-                    margin: 0,
-                    padding: '1.5rem',
-                    fontSize: '0.9rem',
-                  }}
-                >
-                  {codeText}
-                </SyntaxHighlighter>
-              </div>
-            )
+            return <NotionCode key={index} code={plainText(block.text)} language={block.language} />
 
           case 'quote':
             return (
-              <blockquote
-                key={index}
-                className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 py-2 my-4 italic text-gray-700 dark:text-gray-300"
-              >
+              <blockquote key={index}>
                 <RichTextRenderer richText={block.text} />
               </blockquote>
             )
 
           case 'callout':
             return (
-              <div
+              // The Alert only builds its icon column for an svg, so an emoji
+              // icon sets the two columns itself.
+              <Alert
                 key={index}
-                className="flex gap-3 p-4 my-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
+                className={cn('not-typeset border-0', block.icon && 'grid-cols-[auto_1fr] gap-x-2', surfaceClasses(level))}
               >
-                {block.icon && <span className="text-2xl">{block.icon}</span>}
-                <div className="flex-1">
+                {block.icon && (
+                  <span aria-hidden className={cn('row-span-2', typeClass('body'))}>
+                    {block.icon}
+                  </span>
+                )}
+                <AlertDescription className={cn(typeClass('body'), 'text-foreground')}>
                   <RichTextRenderer richText={block.text} />
-                </div>
-              </div>
+                </AlertDescription>
+              </Alert>
             )
 
           case 'divider':
-            return <hr key={index} className="my-8 border-gray-200 dark:border-gray-700" />
+            return <hr key={index} />
 
           case 'image':
             return (
-              <figure key={index} className="my-6">
+              <figure key={index} className="flex flex-col gap-2">
                 <img
                   src={block.url}
                   alt={block.caption || ''}
-                  className="rounded-lg w-full"
+                  className="w-full rounded-lg outline outline-1 -outline-offset-1 outline-foreground/10"
                   loading="lazy"
                 />
-                {block.caption && (
-                  <figcaption className="text-center text-sm text-gray-600 dark:text-gray-400 mt-2">
-                    {block.caption}
-                  </figcaption>
-                )}
+                {block.caption && <figcaption>{block.caption}</figcaption>}
               </figure>
             )
 
           case 'bookmark':
             return (
-              <a
-                key={index}
-                href={block.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block p-4 my-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                    />
-                  </svg>
-                  <span className="text-[var(--lagoon-deep)] hover:underline">{block.url}</span>
-                </div>
-                {block.caption && <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">{block.caption}</p>}
-              </a>
+              <p key={index} className="flex flex-col">
+                <a href={block.url} target="_blank" rel="noopener noreferrer" className="break-all">
+                  {block.url}
+                </a>
+                {block.caption && <span className={typeClass('caption')}>{block.caption}</span>}
+              </p>
             )
 
           case 'toggle':
@@ -204,6 +228,14 @@ export function NotionRenderer({ blocks }: { blocks: NotionBlock[] }) {
             return null
         }
       })}
+    </>
+  )
+}
+
+export function NotionRenderer({ blocks }: { blocks: NotionBlock[] }) {
+  return (
+    <div className="typeset">
+      <BlockList blocks={blocks} />
     </div>
   )
 }

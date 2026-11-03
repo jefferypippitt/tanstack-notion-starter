@@ -1,4 +1,3 @@
-import { createServerFn } from '@tanstack/react-start'
 import {
   getPosts as getNotionPosts,
   getProjects as getNotionProjects,
@@ -7,90 +6,89 @@ import {
 import { samplePosts, sampleProjects } from './sample-data'
 import { siteConfig } from '../config/site'
 
-export const generateSitemap = createServerFn({
-  method: 'GET',
-}).handler(async () => {
+// sitemap.xml, rss.xml, and robots.txt, built per request from the same posts
+// and projects the pages show (served by the routes of the same names).
+
+// The site's public address: siteConfig.url once it is set, otherwise the
+// address the request came in on, so a fresh fork's feeds still link correctly.
+export function siteUrl(request: Request) {
+  const configured = siteConfig.url.replace(/\/$/, '')
+  return configured && configured !== 'https://example.com' ? configured : new URL(request.url).origin
+}
+
+export async function generateSitemap(baseUrl: string) {
   const posts = isNotionConfigured() ? await getNotionPosts() : samplePosts
   const projects = isNotionConfigured() ? await getNotionProjects() : sampleProjects
 
-  const baseUrl = siteConfig.url
-
-  const staticPages = [
+  const pages: Array<{ url: string; priority: string; lastmod?: string }> = [
     { url: '/', priority: '1.0' },
     { url: '/blog', priority: '0.9' },
     { url: '/projects', priority: '0.9' },
     { url: '/about', priority: '0.8' },
+    ...posts.map((post) => ({ url: `/blog/${post.slug}`, lastmod: post.date, priority: '0.7' })),
+    ...projects.map((project) => ({ url: `/projects/${project.slug}`, lastmod: project.date, priority: '0.7' })),
   ]
-
-  const postPages = posts.map((post) => ({
-    url: `/blog/${post.slug}`,
-    lastmod: post.date,
-    priority: '0.7',
-  }))
-
-  const projectPages = projects.map((project) => ({
-    url: `/projects/${project.slug}`,
-    lastmod: project.date,
-    priority: '0.7',
-  }))
-
-  const allPages = [...staticPages, ...postPages, ...projectPages]
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${allPages
+${pages
   .map(
     (page) => `  <url>
-    <loc>${baseUrl}${page.url}</loc>
-    ${page.lastmod ? `<lastmod>${page.lastmod}</lastmod>` : ''}
+    <loc>${escapeXml(baseUrl + page.url)}</loc>${page.lastmod ? `\n    <lastmod>${page.lastmod}</lastmod>` : ''}
     <changefreq>weekly</changefreq>
     <priority>${page.priority}</priority>
   </url>`,
   )
   .join('\n')}
 </urlset>`
-})
+}
 
-export const generateRSS = createServerFn({
-  method: 'GET',
-}).handler(async () => {
+export async function generateRSS(baseUrl: string) {
   const posts = isNotionConfigured() ? await getNotionPosts() : samplePosts
 
-  const rss = `<?xml version="1.0" encoding="UTF-8"?>
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${escapeXml(siteConfig.title)}</title>
-    <link>${siteConfig.url}</link>
+    <link>${baseUrl}</link>
     <description>${escapeXml(siteConfig.description)}</description>
     <language>en</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-    <atom:link href="${siteConfig.url}/rss.xml" rel="self" type="application/rss+xml" />
+    <atom:link href="${baseUrl}/rss.xml" rel="self" type="application/rss+xml" />
 ${posts
   .map(
     (post) => `    <item>
       <title>${escapeXml(post.title)}</title>
-      <link>${siteConfig.url}/blog/${post.slug}</link>
-      <guid isPermaLink="true">${siteConfig.url}/blog/${post.slug}</guid>
+      <link>${baseUrl}/blog/${encodeURIComponent(post.slug)}</link>
+      <guid isPermaLink="true">${baseUrl}/blog/${encodeURIComponent(post.slug)}</guid>
       <description>${escapeXml(post.summary)}</description>
-      <pubDate>${new Date(post.date).toUTCString()}</pubDate>
-      ${post.tags.map((tag: string) => `<category>${escapeXml(tag)}</category>`).join('\n      ')}
+      <pubDate>${new Date(post.date).toUTCString()}</pubDate>${post.tags
+        .map((tag) => `\n      <category>${escapeXml(tag)}</category>`)
+        .join('')}
     </item>`,
   )
   .join('\n')}
   </channel>
 </rss>`
+}
 
-  return rss
-})
-
-export const generateRobots = createServerFn({
-  method: 'GET',
-}).handler(async () => {
+export function generateRobots(baseUrl: string) {
   return `User-agent: *
 Allow: /
 
-Sitemap: ${siteConfig.url}/sitemap.xml`
-})
+Sitemap: ${baseUrl}/sitemap.xml
+`
+}
+
+// Feeds change when Notion does: browsers and CDNs may reuse one for an hour.
+export function textResponse(body: string, contentType: string) {
+  return new Response(body, {
+    headers: {
+      'Content-Type': `${contentType}; charset=utf-8`,
+      'Cache-Control': 'public, max-age=3600',
+    },
+  })
+}
 
 function escapeXml(unsafe: string): string {
   return unsafe

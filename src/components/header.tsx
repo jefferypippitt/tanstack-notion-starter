@@ -1,34 +1,55 @@
 import { Link } from '@tanstack/react-router'
-import ThemeToggle from './ThemeToggle'
-import { siteConfig } from '../config/site'
+import { navigation } from '@/lib/navigation'
+import { siteConfig } from '@/config/site'
+import { cn } from '@/lib/utils'
+import { typeClass } from '@/lib/type-scale'
 
-export default function Header() {
+export function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+// Sticky across every page: initials home link on the left, the section links
+// on the right, the way a narrow column reads best. A 48px row (--bar-height)
+// of 32px controls; the initials and the last link's text line up with the
+// page's text edge. The theme menu lives in the footer.
+export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-[rgba(23,58,64,0.08)] bg-white/80 backdrop-blur-sm supports-[backdrop-filter]:bg-white/70 dark:bg-[var(--sea-ink)]/80 dark:border-[rgba(255,255,255,0.08)]">
-      <div className="page-wrap px-4 flex h-14 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 no-underline">
-          <span className="text-lg font-bold text-[var(--sea-ink)]">{siteConfig.name}</span>
+    <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
+      <div className="page-column flex h-(--bar-height) items-center justify-between gap-4">
+        <Link
+          to="/"
+          aria-label={`${siteConfig.author.name}, home`}
+          className={cn(
+            'rounded-md weight-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+            typeClass('subtitle'),
+          )}
+        >
+          {initials(siteConfig.author.name)}
         </Link>
-        <nav className="flex items-center gap-6">
-          <Link
-            to="/blog"
-            className="text-sm font-medium text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)] transition-colors no-underline"
-          >
-            Blog
-          </Link>
-          <Link
-            to="/projects"
-            className="text-sm font-medium text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)] transition-colors no-underline"
-          >
-            Projects
-          </Link>
-          <Link
-            to="/about"
-            className="text-sm font-medium text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)] transition-colors no-underline"
-          >
-            About
-          </Link>
-          <ThemeToggle />
+
+        {/* Links are 32px controls with 10px padding; pulling the row out by
+            that much puts the last label on the column edge. */}
+        <nav aria-label="Site" className="-mr-2.5">
+          <ul className="flex items-center">
+            {navigation.map((item) => (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  className={cn(
+                    'inline-flex h-8 items-center rounded-md px-2.5 text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 data-[status=active]:text-foreground data-[status=active]:weight-semibold',
+                    typeClass('body'),
+                  )}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </nav>
       </div>
     </header>

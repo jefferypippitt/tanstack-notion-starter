@@ -1,14 +1,26 @@
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { HeadContent, Link, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import Footer from '../components/Footer'
-import Header from '../components/Header'
+import { TooltipProvider } from '#/components/ui/tooltip'
+import { SiteHeader } from '@/components/header'
+import { SiteFooter } from '@/components/footer'
+import { SetupBanner } from '@/components/setup-banner'
+import { PageHeader } from '@/components/page'
+import { checkNotionStatus, fetchLinks } from '@/lib/server-functions'
+import { THEME_INIT_SCRIPT } from '@/lib/theme'
+import { cn } from '@/lib/utils'
+import { typeClass } from '@/lib/type-scale'
 
 import appCss from '../styles.css?url'
 
-const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.style.colorScheme=resolved;}catch(e){}})();`
-
 export const Route = createRootRoute({
+  loader: async () => {
+    const [links, status] = await Promise.all([fetchLinks(), checkNotionStatus()])
+    return { links, status }
+  },
+  // Neither changes while someone browses, so moving between pages skips the refetch.
+  staleTime: Infinity,
+  component: RootLayout,
   head: () => ({
     meta: [
       {
@@ -43,13 +55,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
-      <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(79,184,178,0.24)]">
-        <Header />
-        {children}
-        <Footer />
+      <body className="flex min-h-svh flex-col">
+        <a
+          href="#main"
+          className="sr-only rounded-md bg-foreground px-3 py-2 text-background focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50"
+        >
+          Skip to content
+        </a>
+        <TooltipProvider>{children}</TooltipProvider>
         <TanStackDevtools
           config={{
-            position: 'bottom-right',
+            // Left, so in dev it never covers the footer's theme toggle.
+            position: 'bottom-left',
           }}
           plugins={[
             {
@@ -64,22 +81,34 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   )
 }
 
+// Every page: sticky header, one narrow 40rem column, footer pinned to the bottom
+// of the screen when the page is short. Header, main and footer share the
+// column and its gutter; main holds the same padding above and below every
+// route (--page-y), and the routes space themselves with page-stack.
+function RootLayout() {
+  const { links, status } = Route.useLoaderData()
+
+  return (
+    <>
+      <SiteHeader />
+      <main id="main" className="page-column flex-1 py-(--page-y)">
+        {status.problem && <SetupBanner problem={status.problem} />}
+        <Outlet />
+      </main>
+      <SiteFooter links={links} />
+    </>
+  )
+}
+
 function NotFound() {
   return (
-    <main className="page-wrap px-4 pb-8 pt-14">
-      <div className="island-shell rounded-[2rem] px-6 py-20 sm:px-10 sm:py-32 text-center">
-        <h1 className="text-6xl font-bold text-[var(--sea-ink)] mb-4">404</h1>
-        <h2 className="text-2xl font-semibold text-[var(--sea-ink)] mb-4">Page Not Found</h2>
-        <p className="text-[var(--sea-ink-soft)] mb-8 max-w-md mx-auto">
-          The page you're looking for doesn't exist or has been moved.
-        </p>
-        <a
-          href="/"
-          className="inline-block rounded-full border border-[rgba(50,143,151,0.3)] bg-[rgba(79,184,178,0.14)] px-6 py-3 text-sm font-semibold text-[var(--lagoon-deep)] no-underline transition hover:-translate-y-0.5 hover:bg-[rgba(79,184,178,0.24)]"
-        >
-          Go Home
-        </a>
-      </div>
-    </main>
+    <div className="page-stack">
+      <PageHeader title="Page not found" description="It may have moved, or the link is broken." />
+      <p>
+        <Link to="/" className={cn(typeClass('body'), 'text-link')}>
+          Go to the homepage
+        </Link>
+      </p>
+    </div>
   )
 }

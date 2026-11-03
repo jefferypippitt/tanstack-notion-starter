@@ -1,19 +1,22 @@
+// Site-wide settings. Personal content (profile links, the About text, and
+// experience) lives in Notion; see the README for the Link, Experience, and
+// About row types.
 export const siteConfig = {
-  name: 'Your Name',
+  name: 'John Doe',
   title: 'Portfolio & Blog',
-  description: 'Developer, designer, and creator of things.',
-  url: 'https://your-site.com',
+  description: 'Projects and writing on web development and design.',
+  url: 'https://example.com',
+  intro: 'Full-stack developer',
   author: {
-    name: 'Your Name',
-    bio: 'I build things for the web. Currently interested in modern web frameworks, TypeScript, and developer tools.',
-    avatar: '/avatar.jpg',
+    name: 'John Doe',
+    role: 'Full-stack developer',
+    bio: "These days I'm most interested in web frameworks, TypeScript, and developer tools.",
   },
-  social: {
-    github: 'https://github.com/yourusername',
-    twitter: 'https://twitter.com/yourusername',
-    linkedin: 'https://linkedin.com/in/yourusername',
-    email: 'hello@your-site.com',
+  homepage: {
+    projects: 2, // one row of project cards on the home page
+    posts: 3,
   },
+
   links: {
     home: '/',
     blog: '/blog',

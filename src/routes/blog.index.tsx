@@ -1,93 +1,85 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { PostCard } from '../components/PostCard'
-import { SetupBanner } from '../components/SetupBanner'
-import { fetchPosts, checkNotionStatus } from '../lib/server-functions'
-import { siteConfig } from '../config/site'
 import { useState } from 'react'
+import { PageHeader } from '@/components/page'
+import { PostList } from '@/components/post-list'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { fetchPosts } from '@/lib/server-functions'
+import { siteConfig } from '@/config/site'
+import { cn } from '@/lib/utils'
+import { typeClass } from '@/lib/type-scale'
+import { surfaceClasses } from '@/lib/surface-classes'
 
-export const Route = createFileRoute('/blog')({
+const ALL = 'all'
+
+// A filter bar, so the compact step: 28px items (size="sm") with the compact
+// body role (12/18). Muted; the selected tag turns foreground and semibold.
+const tagClass = cn(
+  typeClass('body', 'compact'),
+  'text-muted-foreground weight-normal aria-pressed:text-foreground aria-pressed:weight-semibold',
+)
+
+export const Route = createFileRoute('/blog/')({
   component: Blog,
   loader: async () => {
-    const [posts, status] = await Promise.all([fetchPosts(), checkNotionStatus()])
-    return { posts, status }
+    const posts = await fetchPosts()
+    return { posts }
   },
   head: () => ({
     meta: [
-      {
-        title: `Blog - ${siteConfig.name}`,
-      },
-      {
-        name: 'description',
-        content: `Read articles and posts by ${siteConfig.author.name}`,
-      },
+      { title: `Writing - ${siteConfig.name}` },
+      { name: 'description', content: `Writing by ${siteConfig.author.name}` },
     ],
   }),
 })
 
 function Blog() {
-  const { posts, status } = Route.useLoaderData()
-  const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  const { posts } = Route.useLoaderData()
+  const [selectedTag, setSelectedTag] = useState(ALL)
 
   const allTags = Array.from(new Set(posts.flatMap((p) => p.tags))).sort()
-
-  const filteredPosts = selectedTag
-    ? posts.filter((p) => p.tags.includes(selectedTag))
-    : posts
+  const filteredPosts =
+    selectedTag === ALL ? posts : posts.filter((p) => p.tags.includes(selectedTag))
 
   return (
-    <main className="page-wrap px-4 pb-8 pt-14">
-      {status.usingFallback && <SetupBanner />}
+    <div className="page-stack">
+      <PageHeader title="Writing" />
 
-      <section className="mb-12">
-        <h1 className="text-4xl sm:text-5xl font-bold text-[var(--sea-ink)] mb-4">Blog</h1>
-        <p className="text-lg text-[var(--sea-ink-soft)] max-w-2xl">
-          Thoughts, tutorials, and updates on web development, design, and technology.
-        </p>
-      </section>
-
-      {allTags.length > 0 && (
-        <section className="mb-8">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setSelectedTag(null)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                selectedTag === null
-                  ? 'bg-[rgba(79,184,178,0.24)] text-[var(--lagoon-deep)] border-2 border-[var(--lagoon-deep)]'
-                  : 'bg-gray-100 dark:bg-gray-800 text-[var(--sea-ink-soft)] hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              All ({posts.length})
-            </button>
+      {/* The filter sits a heading's distance above the list it filters. */}
+      <div className="section-stack">
+        {allTags.length > 1 && (
+          <ToggleGroup
+            aria-label="Filter posts by topic"
+            variant="outline"
+            size="sm"
+            className="flex-wrap"
+            value={[selectedTag]}
+            onValueChange={(value) => setSelectedTag(value[0] ?? ALL)}
+          >
+            <ToggleGroupItem value={ALL} className={tagClass}>
+              All
+            </ToggleGroupItem>
             {allTags.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => setSelectedTag(tag)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedTag === tag
-                    ? 'bg-[rgba(79,184,178,0.24)] text-[var(--lagoon-deep)] border-2 border-[var(--lagoon-deep)]'
-                    : 'bg-gray-100 dark:bg-gray-800 text-[var(--sea-ink-soft)] hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                {tag} ({posts.filter((p) => p.tags.includes(tag)).length})
-              </button>
+              <ToggleGroupItem key={tag} value={tag} className={tagClass}>
+                {tag}
+              </ToggleGroupItem>
             ))}
-          </div>
-        </section>
-      )}
-
-      <section>
-        {filteredPosts.length === 0 ? (
-          <div className="island-shell rounded-xl p-12 text-center">
-            <p className="text-[var(--sea-ink-soft)]">No posts found.</p>
-          </div>
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
-            ))}
-          </div>
+          </ToggleGroup>
         )}
-      </section>
-    </main>
+
+        {filteredPosts.length > 0 ? (
+          <PostList posts={filteredPosts} showSummary datePattern="MMM d, yyyy" />
+        ) : (
+          <Empty className={cn('rounded-xl border-0', surfaceClasses(2))}>
+            <EmptyHeader>
+              <EmptyTitle>No posts yet</EmptyTitle>
+              <EmptyDescription>
+                Posts marked Published in your Notion database appear here.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
+      </div>
+    </div>
   )
 }

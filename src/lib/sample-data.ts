@@ -1,61 +1,49 @@
-import type { Post, Project } from './types'
+import type { AboutContent, NotionBlock, Post, Project, RichText, SocialLink } from './types'
+import { img, posts as demoPosts, type DemoBlock, type DemoRichText } from '../../scripts/notion-demo-content.mjs'
 
-export const samplePosts: Post[] = [
-  {
-    id: 'sample-1',
-    slug: 'getting-started-with-tanstack-start',
-    title: 'Getting Started with TanStack Start',
-    summary:
-      'Learn how to build modern web applications with TanStack Start, the full-stack React framework.',
-    date: '2024-01-15',
-    published: true,
-    tags: ['TanStack', 'React', 'Tutorial'],
-    coverImage: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&q=80',
-    content: [
-      {
-        type: 'paragraph',
-        text: [{ text: 'This is a sample post to demonstrate the blog functionality.' }],
-      },
-      {
-        type: 'heading_2',
-        text: [{ text: 'Connect your Notion database' }],
-      },
-      {
-        type: 'paragraph',
-        text: [
-          {
-            text: 'To replace this sample content with your own posts from Notion, follow the setup instructions in the README.',
-          },
-        ],
-      },
-      {
-        type: 'code',
-        text: [{ text: 'npm install\nnpm run dev' }],
-        language: 'bash',
-      },
-    ],
-  },
-  {
-    id: 'sample-2',
-    slug: 'building-with-typescript',
-    title: 'Building Type-Safe Applications with TypeScript',
-    summary: 'Explore best practices for building robust applications with TypeScript.',
-    date: '2024-01-10',
-    published: true,
-    tags: ['TypeScript', 'Best Practices'],
-    coverImage: 'https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=800&q=80',
-  },
-  {
-    id: 'sample-3',
-    slug: 'modern-css-with-tailwind',
-    title: 'Modern CSS with Tailwind',
-    summary: 'How Tailwind CSS changed the way we think about styling web applications.',
-    date: '2024-01-05',
-    published: true,
-    tags: ['CSS', 'Tailwind', 'Design'],
-    coverImage: 'https://images.unsplash.com/photo-1507721999472-8ed4421c4af2?w=800&q=80',
-  },
-]
+// The sample posts are the same demo posts `pnpm setup:notion --seed`
+// writes to Notion, converted from the Notion API's block shape to the one
+// the renderer reads, so the site looks the same before and after setup.
+function toRichText(runs: DemoRichText[]): RichText[] {
+  return runs.map((run) => ({ text: run.text.content, href: run.text.link?.url, ...run.annotations }))
+}
+
+function toBlock(block: DemoBlock): NotionBlock | null {
+  const value = block[block.type]
+  switch (block.type) {
+    case 'paragraph':
+    case 'heading_1':
+    case 'heading_2':
+    case 'heading_3':
+    case 'bulleted_list_item':
+    case 'numbered_list_item':
+    case 'quote':
+      return { type: block.type, text: toRichText(value.rich_text) }
+    case 'callout':
+      return { type: 'callout', text: toRichText(value.rich_text), icon: value.icon?.emoji }
+    case 'code':
+      return { type: 'code', text: toRichText(value.rich_text), language: value.language }
+    case 'image':
+      return { type: 'image', url: value.external.url, caption: value.caption?.[0]?.text.content }
+    case 'divider':
+      return { type: 'divider' }
+    default:
+      return null
+  }
+}
+
+export const samplePosts: Post[] = demoPosts.map((post, index) => ({
+  id: `sample-post-${index + 1}`,
+  slug: post.slug,
+  title: post.title,
+  summary: post.summary,
+  date: post.date,
+  published: true,
+  tags: post.tags,
+  coverImage: img(post.cover),
+  featured: index === 0,
+  content: post.body.map(toBlock).filter((block): block is NotionBlock => block !== null),
+}))
 
 export const sampleProjects: Project[] = [
   {
@@ -63,24 +51,24 @@ export const sampleProjects: Project[] = [
     slug: 'notion-cms-starter',
     title: 'Notion CMS Starter',
     description:
-      'A production-ready starter template for building blogs and portfolios with Notion as a CMS.',
+      'A blog and portfolio template that uses Notion as its CMS.',
     date: '2024-01-20',
     published: true,
     tags: ['TanStack', 'Notion', 'TypeScript'],
     coverImage: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80',
     featured: true,
-    repoUrl: 'https://github.com/yourusername/notion-cms-starter',
-    liveUrl: 'https://notion-starter.vercel.app',
+    repoUrl: 'https://example.com/notion-cms-starter',
+    liveUrl: 'https://example.com',
     content: [
       {
         type: 'paragraph',
         text: [
-          { text: 'This is a sample project. Connect your Notion database to display real projects.' },
+          { text: 'This is a sample project. Connect your Notion database to show your own.' },
         ],
       },
       {
         type: 'heading_2',
-        text: [{ text: 'Key Features' }],
+        text: [{ text: 'Features' }],
       },
       {
         type: 'bulleted_list_item',
@@ -104,23 +92,64 @@ export const sampleProjects: Project[] = [
     id: 'sample-project-2',
     slug: 'task-manager-app',
     title: 'Task Manager App',
-    description: 'A collaborative task management application built with modern web technologies.',
+    description: 'A shared task list for teams.',
     date: '2024-01-15',
     published: true,
     tags: ['React', 'TypeScript', 'Firebase'],
     featured: true,
-    repoUrl: 'https://github.com/yourusername/task-manager',
-    liveUrl: 'https://task-manager-demo.vercel.app',
+    repoUrl: 'https://example.com/task-manager',
+    liveUrl: 'https://example.com',
   },
   {
     id: 'sample-project-3',
     slug: 'weather-dashboard',
     title: 'Weather Dashboard',
-    description: 'Real-time weather data visualization with charts and forecasts.',
+    description: 'Live weather data with charts and forecasts.',
     date: '2024-01-10',
     published: true,
     tags: ['React', 'API', 'Data Visualization'],
     featured: false,
-    liveUrl: 'https://weather-dash-demo.vercel.app',
+    liveUrl: 'https://example.com',
   },
 ]
+
+// No sample links: any placeholder username would point at a real person's
+// account. Add Type = Link rows in Notion to fill the links row.
+export const sampleLinks: SocialLink[] = []
+
+export const sampleAbout: AboutContent = {
+  blocks: [
+    {
+      type: 'paragraph',
+      text: [
+        {
+          text: 'I build web applications that load fast, work for everyone, and are easy to use.',
+        },
+      ],
+    },
+    {
+      type: 'paragraph',
+      text: [
+        {
+          text: 'This sample text comes from the starter. Add a Type = About page in Notion and its body replaces it.',
+        },
+      ],
+    },
+  ],
+  experience: [
+    {
+      id: 'sample-experience-1',
+      role: 'Senior Frontend Engineer',
+      company: 'Acme Inc.',
+      start: '2022-01-01',
+      end: null,
+    },
+    {
+      id: 'sample-experience-2',
+      role: 'Frontend Engineer',
+      company: 'Studio Name',
+      start: '2019-01-01',
+      end: '2022-01-01',
+    },
+  ],
+}
