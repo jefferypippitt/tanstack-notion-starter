@@ -22,7 +22,7 @@ pnpm setup:notion
 pnpm dev
 ```
 
-The site runs at [http://localhost:43210](http://localhost:43210).
+The site runs at [http://localhost:3000](http://localhost:3000).
 
 `pnpm setup:notion` walks you through connecting Notion:
 
@@ -111,7 +111,7 @@ The repo includes the [shadcn/ui](https://ui.shadcn.com) agent skills, so coding
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Start the dev server on port 43210 |
+| `pnpm dev` | Start the dev server on port 3000 |
 | `pnpm build` | Build for production |
 | `pnpm preview` | Serve the production build |
 | `pnpm typecheck` | Type-check the project |
